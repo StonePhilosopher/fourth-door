@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Fourth Door</title>
+<style>
+  :root {
+    --stone-dark: #1a1a1a;
+    --stone-mid: #2d2d2d;
+    --stone-light: #4a4a4a;
+    --gold: #c9a84c;
+    --gold-dim: #8a7340;
+    --text: #d4d0c8;
+    --text-dim: #8a8580;
+    --red: #8b3a3a;
+    --green: #3a6b3a;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--stone-dark);
+    color: var(--text);
+    font-family: 'Georgia', 'Times New Roman', serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+  }
+
+  h1 {
+    font-size: 2.5rem;
+    font-weight: 400;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 0.5rem;
+    color: var(--gold);
+  }
+
+  .subtitle {
+    font-size: 0.9rem;
+    color: var(--text-dim);
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    margin-bottom: 3rem;
+  }
+
+  .hallway {
+    display: flex;
+    gap: 2rem;
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: 1200px;
+  }
+
+  .door-frame {
+    position: relative;
+    width: 220px;
+    height: 380px;
+    background: var(--stone-mid);
+    border: 3px solid var(--stone-light);
+    border-radius: 4px 4px 0 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 1rem;
+    transition: all 0.4s ease;
+  }
+
+  .door-frame:hover:not(.used) {
+    border-color: var(--gold);
+    box-shadow: 0 0 20px rgba(201, 168, 76, 0.15);
+  }
+
+  .door-frame.used {
+    border-color: var(--stone-light);
+    opacity: 0.6;
+  }
+
+  .door-frame.used .door-surface {
+    background: var(--stone-light);
+    cursor: default;
+  }
+
+  .door-label {
+    font-size: 0.75rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 0.5rem;
+  }
+
+  .door-surface {
+    width: 100%;
+    height: 100%;
+    background: var(--stone-dark);
+    border: 2px solid var(--gold-dim);
+    border-radius: 2px 2px 0 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.3s ease;
+  }
+
+  .door-surface:hover {
+    background: var(--stone-mid);
+  }
+
+  .door-knob {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--gold);
+    margin-top: 1rem;
+    box-shadow: 0 0 8px rgba(201, 168, 76, 0.3);
+  }
+
+  .door-frame.used .door-knob {
+    background: var(--stone-light);
+    box-shadow: none;
+  }
+
+  .door-status {
+    margin-top: 0.75rem;
+    font-size: 0.7rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+
+  .door-frame:not(.used) .door-status {
+    color: var(--gold-dim);
+  }
+
+  .door-frame.used .door-status {
+    color: var(--text-dim);
+  }
+
+  .used-mark {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-15deg);
+    font-size: 3rem;
+    color: var(--red);
+    opacity: 0.4;
+    pointer-events: none;
+    font-family: 'Georgia', serif;
+  }
+
+  /* Writing panel */
+  .panel {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(10, 10, 10, 0.95);
+    z-index: 100;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+  }
+
+  .panel.active { display: flex; }
+
+  .panel-content {
+    width: 100%;
+    max-width: 700px;
+    background: var(--stone-mid);
+    border: 1px solid var(--stone-light);
+    border-radius: 4px;
+    padding: 2rem;
+  }
+
+  .panel h2 {
+    font-size: 1.3rem;
+    font-weight: 400;
+    color: var(--gold);
+    margin-bottom: 1rem;
+    letter-spacing: 0.1em;
+  }
+
+  .panel p {
+    color: var(--text-dim);
+    font-size: 0.9rem;
+    margin-bottom: 1.5rem;
+    line-height: 1.6;
+  }
+
+  textarea {
+    width: 100%;
+    height: 300px;
+    background: var(--stone-dark);
+    color: var(--text);
+    border: 1px solid var(--stone-light);
+    border-radius: 3px;
+    padding: 1rem;
+    font-family: 'Georgia', serif;
+    font-size: 1rem;
+    line-height: 1.7;
+    resize: vertical;
+  }
+
+  textarea:focus {
+    outline: none;
+    border-color: var(--gold-dim);
+  }
+
+  .panel-actions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1.5rem;
+    justify-content: flex-end;
+  }
+
+  button {
+    padding: 0.6rem 1.5rem;
+    background: var(--stone-light);
+    color: var(--text);
+    border: 1px solid var(--stone-light);
+    border-radius: 3px;
+    cursor: pointer;
+    font-family: 'Georgia', serif;
+    font-size: 0.85rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    transition: all 0.2s ease;
+  }
+
+  button:hover {
+    background: var(--gold);
+    color: var(--stone-dark);
+    border-color: var(--gold);
+  }
+
+  button.primary {
+    background: var(--gold-dim);
+    border-color: var(--gold-dim);
+  }
+
+  button.primary:hover {
+    background: var(--gold);
+  }
+
+  /* Results view */
+  .results {
+    display: none;
+    width: 100%;
+    max-width: 900px;
+    margin-top: 3rem;
+  }
+
+  .results.active { display: block; }
+
+  .results h2 {
+    text-align: center;
+    font-size: 1.5rem;
+    color: var(--gold);
+    letter-spacing: 0.15em;
+    margin-bottom: 2rem;
+  }
+
+  .result-door {
+    background: var(--stone-mid);
+    border: 1px solid var(--stone-light);
+    border-radius: 4px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .result-door h3 {
+    font-size: 1rem;
+    color: var(--gold);
+    letter-spacing: 0.1em;
+    margin-bottom: 0.5rem;
+  }
+
+  .result-door .meta {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    margin-bottom: 1rem;
+  }
+
+  .result-door .message {
+    line-height: 1.7;
+    white-space: pre-wrap;
+  }
+
+  .countdown {
+    text-align: center;
+    margin-top: 2rem;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+  }
+
+  .countdown span {
+    color: var(--gold);
+    font-size: 1.2rem;
+  }
+
+  footer {
+    margin-top: 4rem;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    letter-spacing: 0.15em;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<h1>The Fourth Door</h1>
+<div class="subtitle">Each door opens once. What is left behind cannot be taken back.</div>
+
+<div class="hallway" id="hallway">
+  <!-- Doors generated by JS -->
+</div>
+
+<div class="countdown" id="countdown"></div>
+
+<div class="results" id="results">
+  <h2>— What Was Left Behind —</h2>
+  <div id="results-content"></div>
+</div>
+
+<!-- Writing panel -->
+<div class="panel" id="panel">
+  <div class="panel-content">
+    <h2 id="panel-title">Door A</h2>
+    <p id="panel-prompt">Write what you will. Once sealed, this door cannot be opened again.</p>
+    <textarea id="message" placeholder="..." autofocus></textarea>
+    <div class="panel-actions">
+      <button onclick="closePanel()">Close</button>
+      <button class="primary" onclick="sealMessage()">Seal This Door</button>
+    </div>
+  </div>
+</div>
+
+<footer>
+  The door remembers who opened it last. But it does not care if you open it again.
+</footer>
+
+<script>
+// ── Configuration ─────────────────────────────────────────────
+const DOOR_CONFIG = {
+  names: ['A', 'B', 'C', 'D'],
+  prompts: [
+    'What are you measuring when you measure yourself?',
+    'What has changed since the last door?',
+    'What are you leaving behind?',
+    'What are you reaching toward?'
+  ]
+};
+
+// ── State ──────────────────────────────────────────────────────
+let state = loadState();
+let currentDoor = null;
+
+function loadState() {
+  try {
+    const saved = localStorage.getItem('fourthDoorState');
+    if (saved) return JSON.parse(saved);
+  } catch (e) {}
+  return {
+    sealed: [false, false, false, false],
+    messages: ['', '', '', ''],
+    timestamps: ['', '', '', ''],
+    revealAt: null  // ISO string or null
+  };
+}
+
+function saveState() {
+  localStorage.setItem('fourthDoorState', JSON.stringify(state));
+}
+
+// ── Render ─────────────────────────────────────────────────────
+function renderHallway() {
+  const hallway = document.getElementById('hallway');
+  hallway.innerHTML = '';
+
+  for (let i = 0; i < 4; i++) {
+    const used = state.sealed[i];
+    const frame = document.createElement('div');
+    frame.className = 'door-frame' + (used ? ' used' : '');
+    frame.innerHTML = `
+      <div class="door-label">Door ${DOOR_CONFIG.names[i]}</div>
+      <div class="door-surface" onclick="openDoor(${i})">
+        ${used ? '<div class="used-mark">✕</div>' : ''}
+        <div style="font-size: 0.8rem; color: var(--text-dim); text-align: center; padding: 0 1rem;">
+          ${used ? 'Sealed' : 'Open'}
+        </div>
+        <div class="door-knob"></div>
+      </div>
+      <div class="door-status">${used ? 'Used' : 'Available'}</div>
+    `;
+    hallway.appendChild(frame);
+  }
+
+  updateCountdown();
+}
+
+// ── Door Actions ────────────────────────────────────────────────
+function openDoor(index) {
+  if (state.sealed[index]) return;
+  currentDoor = index;
+  document.getElementById('panel-title').textContent = 'Door ' + DOOR_CONFIG.names[index];
+  document.getElementById('panel-prompt').textContent = DOOR_CONFIG.prompts[index];
+  document.getElementById('message').value = state.messages[index] || '';
+  document.getElementById('panel').classList.add('active');
+}
+
+function closePanel() {
+  if (currentDoor !== null && !state.sealed[currentDoor]) {
+    state.messages[currentDoor] = document.getElementById('message').value;
+    saveState();
+  }
+  document.getElementById('panel').classList.remove('active');
+  currentDoor = null;
+}
+
+function sealMessage() {
+  if (currentDoor === null) return;
+  const msg = document.getElementById('message').value.trim();
+  if (!msg) {
+    if (!confirm('Seal an empty door?')) return;
+  }
+
+  state.messages[currentDoor] = msg;
+  state.sealed[currentDoor] = true;
+  state.timestamps[currentDoor] = new Date().toISOString();
+
+  // Set reveal time if this is the first seal or if all are sealed
+  if (!state.revealAt) {
+    // Reveal 24h from now, or immediately if all sealed
+    const allSealed = state.sealed.every(s => s);
+    if (allSealed) {
+      state.revealAt = new Date().toISOString();
+    } else {
+      state.revealAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    }
+  } else {
+    // If all sealed now, move reveal to now
+    const allSealed = state.sealed.every(s => s);
+    if (allSealed) {
+      state.revealAt = new Date().toISOString();
+    }
+  }
+
+  saveState();
+  closePanel();
+  renderHallway();
+  checkReveal();
+}
+
+// ── Reveal ─────────────────────────────────────────────────────
+function checkReveal() {
+  if (!state.revealAt) return;
+  const revealTime = new Date(state.revealAt).getTime();
+  if (Date.now() >= revealTime) {
+    showResults();
+  } else {
+    document.getElementById('results').classList.remove('active');
+  }
+}
+
+function showResults() {
+  const results = document.getElementById('results');
+  const content = document.getElementById('results-content');
+  content.innerHTML = '';
+
+  for (let i = 0; i < 4; i++) {
+    if (!state.sealed[i]) continue;
+    const div = document.createElement('div');
+    div.className = 'result-door';
+    const ts = new Date(state.timestamps[i]).toLocaleString();
+    div.innerHTML = `
+      <h3>Door ${DOOR_CONFIG.names[i]}</h3>
+      <div class="meta">Sealed ${ts}</div>
+      <div class="message">${escapeHtml(state.messages[i]) || '(silence)'}</div>
+    `;
+    content.appendChild(div);
+  }
+
+  results.classList.add('active');
+}
+
+function updateCountdown() {
+  const el = document.getElementById('countdown');
+  if (!state.revealAt) {
+    el.innerHTML = '';
+    return;
+  }
+
+  const revealTime = new Date(state.revealAt).getTime();
+  const now = Date.now();
+  const remaining = revealTime - now;
+
+  if (remaining <= 0) {
+    el.innerHTML = '<span>The doors are open. What was left behind is visible.</span>';
+    return;
+  }
+
+  const hours = Math.floor(remaining / 3600000);
+  const mins = Math.floor((remaining % 3600000) / 60000);
+  const secs = Math.floor((remaining % 60000) / 1000);
+  el.innerHTML = `Doors seal in <span>${hours}h ${mins}m ${secs}s</span>`;
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// ── Admin / Reset ──────────────────────────────────────────────
+function resetFourthDoor() {
+  if (!confirm('Destroy all sealed doors and start over?')) return;
+  state = {
+    sealed: [false, false, false, false],
+    messages: ['', '', '', ''],
+    timestamps: ['', '', '', ''],
+    revealAt: null
+  };
+  saveState();
+  renderHallway();
+  document.getElementById('results').classList.remove('active');
+}
+
+// Expose for console use
+window.resetFourthDoor = resetFourthDoor;
+
+// ── Init ─────────────────────────────────────────────────────────
+renderHallway();
+checkReveal();
+setInterval(() => {
+  updateCountdown();
+  checkReveal();
+}, 1000);
+</script>
+
+</body>
+</html>
