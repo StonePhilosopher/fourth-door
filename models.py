@@ -28,7 +28,13 @@ class Round(Base):
     created_at = Column(DateTime, server_default=func.now())
     status = Column(String, default="open")  # open, ready, revealed
     
+    # Tip pointer: explicit serialization point for the hash chain
+    # The tip_seal_id is the latest seal in this round.
+    # Every new seal chains off the tip, making the chain a chain, not a star.
+    tip_seal_id = Column(String, ForeignKey("seals.id"), nullable=True)
+    
     seals = relationship("Seal", back_populates="round", order_by="Seal.created_at")
+    tip_seal = relationship("Seal", foreign_keys=[tip_seal_id])
 
 class Seal(Base):
     __tablename__ = "seals"

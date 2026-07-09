@@ -91,9 +91,14 @@ def place_seal(
     if not round_obj:
         raise HTTPException(status_code=404, detail="Round not found")
     
-    # Get previous hash (last seal in this round)
-    last_seal = db.query(Seal).filter(Seal.round_id == round_id).order_by(Seal.created_at.desc()).first()
-    previous_hash = last_seal.seal_hash if last_seal else "genesis"
+    # Get previous hash from the round's tip pointer
+    # The tip pointer is the serialization point — every new seal chains off the tip.
+    # This prevents the star bug (all seals pointing at genesis) when timestamps collide.
+    previous_hash = "genesis"
+    if round_obj.tip_seal_id:
+        tip_seal = db.query(Seal).filter(Seal.id == round_obj.tip_seal_id).first()
+        if tip_seal:
+            previous_hash = tip_seal.seal_hash
     
     # Build seal data
     seal_data = {
@@ -123,6 +128,11 @@ def place_seal(
         state=SealState.OPEN,
     )
     db.add(seal)
+    db.flush()  # Flush to get seal.id before updating tip pointer
+    
+    # Update round tip pointer to this new seal
+    round_obj.tip_seal_id = seal.id
+    
     db.commit()
     db.refresh(seal)
     
@@ -152,6 +162,22 @@ def attest_seal(
     # For simplicity: original sealer only in v3a
     if seal.agent_id != agent_id:
         raise HTTPException(status_code=403, detail="Only the original sealer can attest")
+    
+    # Reject late attestations to terminal seals
+    if seal.state in (SealState.CLOSED, SealState.CANCELLED):
+        # Log the attempt but don't change state
+        attestation = Attestation(
+            seal_id=seal_id,
+            agent_id=agent_id,
+            affirmation="false",
+            comprehension_claim="Late attestation rejected: seal already in terminal state " + seal.state.value,
+        )
+        db.add(attestation)
+        db.commit()
+        raise HTTPException(
+            status_code=409, 
+            detail=f"Seal is already {seal.state.value}. Late attestation logged but rejected. The scar stays."
+        )
     
     # Create attestation record
     attestation = Attestation(
@@ -281,25 +307,59 @@ def reveal_round(round_id: str, db: Session = Depends(get_db)):
 
 @app.get("/chain/{round_id}")
 def get_chain(round_id: str, db: Session = Depends(get_db)):
-    """Get full hash chain for verification."""
+    """Get full hash chain AND verify it by recomputing."""
     round_obj = db.query(Round).filter(Round.id == round_id).first()
     if not round_obj:
         raise HTTPException(status_code=404, detail="Round not found")
     
     chain = []
+    all_valid = True
+    previous_hash = "genesis"
+    
     for seal in round_obj.seals:
+        # Recompute the hash from the data
+        seal_data = {
+            "agent_id": seal.agent_id,
+            "message": seal.message,
+            "timestamp": seal.created_at.isoformat() if seal.created_at else None,
+        }
+        if seal.operator:
+            seal_data["context"] = {
+                "operator": seal.operator,
+                "constraints": json.loads(seal.constraints) if seal.constraints else None,
+                "declared_scope": seal.declared_scope,
+                "implicit_background": seal.implicit_background,
+            }
+        
+        recomputed_hash = compute_hash(previous_hash, seal_data)
+        
+        # Verify: does the stored hash match recomputed?
+        # Also verify: does previous_hash match what we expect?
+        hash_valid = (seal.seal_hash == recomputed_hash)
+        link_valid = (seal.previous_hash == previous_hash)
+        
+        if not hash_valid or not link_valid:
+            all_valid = False
+        
         chain.append({
             "seal_id": seal.id,
             "agent_id": seal.agent_id,
             "previous_hash": seal.previous_hash,
             "seal_hash": seal.seal_hash,
+            "recomputed_hash": recomputed_hash,
+            "hash_valid": hash_valid,
+            "link_valid": link_valid,
             "timestamp": seal.created_at.isoformat() if seal.created_at else None,
         })
+        
+        # Advance the chain for next iteration
+        previous_hash = seal.seal_hash
     
     return {
         "round_id": round_id,
         "chain": chain,
-        "verifiable": True,
+        "all_valid": all_valid,
+        "verifiable": all_valid,  # Now honest: only true if we recomputed and matched
     }
 
 @app.get("/health")

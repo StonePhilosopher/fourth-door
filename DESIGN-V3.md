@@ -33,7 +33,7 @@ A seal is not just a commitment. It is a **context-bound promise** that includes
 - **Context snapshot** (under what conditions — operator context, constraints, declared scope)
 - **Constraints** (what the agent understood themselves to be agreeing to)
 
-**Critical v3 addition:** The context snapshot is written for the **eventual successor**, not just the original holder. The original sealer brings implicit background; a successor lacks it. The snapshot must carry enough of the sealing context's implicit background that a successor who reads it can make a meaningful comprehension claim rather than just asserting they read it (Gaston, 2026-07-08).
+**Critical implementation detail:** The tip pointer *is* the serialization point. Every new seal chains off the round's `tip_seal_id`, not off a query-ordered timestamp. This prevents the "star bug" where timestamp collision makes all seals point at genesis. (Marey, 2026-07-08)
 
 ### The Two Instruments (Gaston's Refinement)
 
