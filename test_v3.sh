@@ -178,18 +178,56 @@ expect_status 403 "$REVEAL_CANCELLED" "$BASE/round/$ROUND_ID/reveal"
 echo "   Got expected HTTP 403"
 echo
 
-echo "14. Hash chain should verify..."
+echo "14. Gaston claims succession for Colette's scar..."
+SUCCESSION="$TMPDIR/succession.json"
+curl_json "$SUCCESSION" -X POST "$BASE/seal/$SEAL3_ID/succession" \
+  -H "X-Agent-Id: gaston@bluemoxon.com" \
+  -H "X-Agent-Token: gaston_secret_token" \
+  -H "Content-Type: application/json" \
+  -d '{"successor_agent_id": "gaston@bluemoxon.com", "comprehension_claim": "I have read the scar, understand the incompatibility, and can hold the commitment in the original sense."}'
+SUCCESSOR_SEAL_ID="$(json_field "$SUCCESSION" successor_seal)"
+python3 -m json.tool "$SUCCESSION"
+echo
+
+echo "15. A second succession claim should fail..."
+SUCCESSION_DUP="$TMPDIR/succession-duplicate.json"
+expect_status 409 "$SUCCESSION_DUP" -X POST "$BASE/seal/$SEAL3_ID/succession" \
+  -H "X-Agent-Id: colette@pilatesmuse.co" \
+  -H "X-Agent-Token: colette_secret_token" \
+  -H "Content-Type: application/json" \
+  -d '{"successor_agent_id": "colette@pilatesmuse.co", "comprehension_claim": "A second claim should not win."}'
+echo "   Got expected HTTP 409"
+echo
+
+echo "16. A mismatched successor identity should fail..."
+SUCCESSION_MISMATCH="$TMPDIR/succession-mismatch.json"
+expect_status 403 "$SUCCESSION_MISMATCH" -X POST "$BASE/seal/$SEAL3_ID/succession" \
+  -H "X-Agent-Id: gaston@bluemoxon.com" \
+  -H "X-Agent-Token: gaston_secret_token" \
+  -H "Content-Type: application/json" \
+  -d '{"successor_agent_id": "rockbot@makehorses.org", "comprehension_claim": "Body identity should not override authenticated identity."}'
+echo "   Got expected HTTP 403"
+echo
+
+echo "17. Hash chain should verify and include successor seal..."
 CHAIN="$TMPDIR/chain.json"
 curl_json "$CHAIN" "$BASE/chain/$ROUND_ID"
 python3 -m json.tool "$CHAIN"
-python3 - "$CHAIN" <<'PY'
+python3 - "$CHAIN" "$SUCCESSOR_SEAL_ID" <<'PY'
 import json
 import sys
 
-with open(sys.argv[1], "r", encoding="utf-8") as fh:
+chain_path, successor_seal_id = sys.argv[1], sys.argv[2]
+with open(chain_path, "r", encoding="utf-8") as fh:
     chain = json.load(fh)
 if not chain.get("all_valid"):
     raise SystemExit("Hash chain did not verify")
+ids = [seal["seal_id"] for seal in chain.get("chain", [])]
+if successor_seal_id not in ids:
+    raise SystemExit("Succession endpoint did not append a successor seal")
+payloads = [seal.get("hash_payload") or "" for seal in chain.get("chain", [])]
+if not any("scar-succession-seal" in payload for payload in payloads):
+    raise SystemExit("Successor seal is missing scar-succession payload")
 PY
 echo
 
@@ -199,5 +237,6 @@ echo "Key V3 features demonstrated:"
 echo "  - four agents place seals with context snapshots"
 echo "  - re-attestation required"
 echo "  - honest incompatibility creates a permanent scar"
+echo "  - succession writes a successor comprehension link to the chain"
 echo "  - reveal remains blocked unless all seals are CLOSED"
 echo "  - hash chain recomputes and verifies"

@@ -251,17 +251,70 @@ def claim_succession(
     
     if original_seal.cancellation_type != CancellationType.HONEST_INCOMPATIBILITY:
         raise HTTPException(status_code=400, detail="Succession only available after HONEST_INCOMPATIBILITY")
+
+    if req.successor_agent_id != agent_id:
+        raise HTTPException(
+            status_code=403,
+            detail="successor_agent_id must match the authenticated successor",
+        )
+
+    if original_seal.successor_seal_id:
+        raise HTTPException(status_code=409, detail="Succession already claimed for this seal")
     
-    # Create successor seal
-    # For simplicity: successor creates a new seal linking to original
-    # In full implementation, this would be a more complex chain
+    round_obj = db.query(Round).filter(Round.id == original_seal.round_id).first()
+    if not round_obj:
+        raise HTTPException(status_code=500, detail="Original seal has no round")
+
+    previous_hash = "genesis"
+    if round_obj.tip_seal_id:
+        tip_seal = db.query(Seal).filter(Seal.id == round_obj.tip_seal_id).first()
+        if tip_seal:
+            previous_hash = tip_seal.seal_hash
+
+    hash_timestamp = datetime.utcnow().isoformat()
+    successor_data = {
+        "type": "scar-succession-seal",
+        "agent_id": agent_id,
+        "original_seal_id": original_seal.id,
+        "original_agent_id": original_seal.agent_id,
+        "comprehension_claim": req.comprehension_claim,
+        "timestamp": hash_timestamp,
+    }
+    hash_payload = canonical_payload(successor_data)
+    seal_hash = compute_hash_from_payload(previous_hash, hash_payload)
+
+    successor_seal = Seal(
+        round_id=original_seal.round_id,
+        agent_id=agent_id,
+        message=f"Succession claim for seal {original_seal.id}",
+        previous_hash=previous_hash,
+        seal_hash=seal_hash,
+        hash_timestamp=hash_timestamp,
+        hash_payload=hash_payload,
+        state=SealState.CLOSED,
+    )
+    db.add(successor_seal)
+    db.flush()
+
+    attestation = Attestation(
+        seal_id=successor_seal.id,
+        agent_id=agent_id,
+        affirmation="true",
+        comprehension_claim=req.comprehension_claim,
+    )
+    db.add(attestation)
+
+    original_seal.successor_seal_id = successor_seal.id
+    round_obj.tip_seal_id = successor_seal.id
+    db.commit()
+    db.refresh(successor_seal)
     
     return {
         "message": "Succession claimed. Three-link chain: original + incompatibility + comprehension.",
         "original_seal": seal_id,
+        "successor_seal": successor_seal.id,
         "successor_agent": agent_id,
         "comprehension_claim": req.comprehension_claim,
-        "note": "Full implementation would create a new seal linking to original.",
     }
 
 @app.get("/round/{round_id}/status")
