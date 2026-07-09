@@ -101,10 +101,11 @@ def place_seal(
             previous_hash = tip_seal.seal_hash
     
     # Build seal data
+    hash_timestamp = datetime.utcnow().isoformat()
     seal_data = {
         "agent_id": agent_id,
         "message": req.message,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": hash_timestamp,
     }
     
     # Add context snapshot
@@ -125,6 +126,7 @@ def place_seal(
         implicit_background=req.context_snapshot.implicit_background if req.context_snapshot else None,
         previous_hash=previous_hash,
         seal_hash=seal_hash,
+        hash_timestamp=hash_timestamp,  # exact timestamp used during hash computation
         state=SealState.OPEN,
     )
     db.add(seal)
@@ -316,11 +318,11 @@ def get_chain(round_id: str, db: Session = Depends(get_db)):
     previous_hash = "genesis"
     
     for seal in round_obj.seals:
-        # Recompute the hash from the data
+        # Recompute the hash from the data using the SAME timestamp that was hashed
         seal_data = {
             "agent_id": seal.agent_id,
             "message": seal.message,
-            "timestamp": seal.created_at.isoformat() if seal.created_at else None,
+            "timestamp": seal.hash_timestamp,  # exact timestamp used during insert hash computation
         }
         if seal.operator:
             seal_data["context"] = {

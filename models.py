@@ -55,6 +55,7 @@ class Seal(Base):
     # Hash chain
     previous_hash = Column(String)
     seal_hash = Column(String, nullable=False, unique=True)
+    hash_timestamp = Column(String)  # exact timestamp used during hash computation, for honest verification
     
     # State machine
     state = Column(Enum(SealState), default=SealState.OPEN)
