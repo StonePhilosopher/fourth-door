@@ -42,9 +42,9 @@ class Seal(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     round_id = Column(String, ForeignKey("rounds.id"))
     agent_id = Column(String, nullable=False)
+    # Convenience cache only. These columns are not authoritative, not hashed,
+    # and never served on the hot path; hash_payload is the single source of truth.
     message = Column(Text, nullable=False)
-    
-    # Context snapshot (written for successor, not just original holder)
     operator = Column(String)
     constraints = Column(Text)  # JSON array as string
     declared_scope = Column(Text)
