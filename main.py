@@ -75,6 +75,21 @@ def compute_hash(previous_hash: str, data: dict) -> str:
     """SHA-256 hash of chain so far + this seal's data."""
     return compute_hash_from_payload(previous_hash, canonical_payload(data))
 
+def payload_for_serving(seal: Seal) -> dict:
+    """Return the canonical payload that was hashed and verified."""
+    if not seal.hash_payload:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Seal {seal.id} has no canonical payload; cannot reveal unverified columns.",
+        )
+    try:
+        return json.loads(seal.hash_payload)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Seal {seal.id} has invalid canonical payload: {exc}",
+        )
+
 # Routes
 
 @app.post("/round")
@@ -289,25 +304,20 @@ def reveal_round(round_id: str, db: Session = Depends(get_db)):
     if not all_closed:
         raise HTTPException(status_code=403, detail="The threshold has not been crossed.")
     
-    # Build reveal
+    # Build reveal from the canonical payload, not from mutable convenience columns.
+    # If /chain verifies hash_payload but /reveal serves seal.message, storage tampering
+    # can alter revealed content while the chain stays green. The verified copy is the
+    # served copy.
     reveals = []
     for seal in round_obj.seals:
-        context = {}
-        if seal.operator:
-            context["operator"] = seal.operator
-        if seal.constraints:
-            context["constraints"] = json.loads(seal.constraints)
-        if seal.declared_scope:
-            context["declared_scope"] = seal.declared_scope
-        if seal.implicit_background:
-            context["implicit_background"] = seal.implicit_background
+        payload = payload_for_serving(seal)
         
         reveals.append({
-            "agent_id": seal.agent_id,
-            "message": seal.message,
-            "timestamp": seal.created_at.isoformat() if seal.created_at else None,
+            "agent_id": payload.get("agent_id"),
+            "message": payload.get("message"),
+            "timestamp": payload.get("timestamp"),
             "seal_hash": seal.seal_hash,
-            "context_snapshot": context if context else None,
+            "context_snapshot": payload.get("context"),
         })
     
     return {

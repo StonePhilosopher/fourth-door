@@ -131,6 +131,8 @@ seal_2: hash(seal_1.hash + seal_2_data)
 
 Conformant implementation: store the exact serialized bytes or exact string used at hash time in a dedicated column (`hash_payload` or equivalent). The verifier reads that column and recomputes. No reconstruction; no re-serialization. Stop re-deriving; store the trace.
 
+**Rule VF-2 (Served-Copy Fidelity):** Any endpoint that reveals, exports, or otherwise serves sealed content MUST serve from the same canonical payload that the verifier hashes. Serving from parallel convenience columns is non-conformant: it allows the verified copy and the served copy to diverge silently. Convenience columns may exist for indexing or display hints, but they are not authoritative. The payload is the seal.
+
 ### Re-attestation Flow
 
 ```
