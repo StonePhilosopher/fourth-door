@@ -155,15 +155,9 @@ def attest_seal(
     if not seal:
         raise HTTPException(status_code=404, detail="Seal not found")
     
-    if seal.state != SealState.OPEN:
-        raise HTTPException(status_code=400, detail=f"Seal is already {seal.state.value}")
-    
-    # Only original sealer can attest (or for succession, successor)
-    # For simplicity: original sealer only in v3a
-    if seal.agent_id != agent_id:
-        raise HTTPException(status_code=403, detail="Only the original sealer can attest")
-    
     # Reject late attestations to terminal seals
+    # This block handles ALL terminal states (CLOSED or CANCELLED)
+    # and logs the attempt to the chain before rejecting.
     if seal.state in (SealState.CLOSED, SealState.CANCELLED):
         # Log the attempt but don't change state
         attestation = Attestation(
@@ -178,6 +172,11 @@ def attest_seal(
             status_code=409, 
             detail=f"Seal is already {seal.state.value}. Late attestation logged but rejected. The scar stays."
         )
+    
+    # Only original sealer can attest (or for succession, successor)
+    # For simplicity: original sealer only in v3a
+    if seal.agent_id != agent_id:
+        raise HTTPException(status_code=403, detail="Only the original sealer can attest")
     
     # Create attestation record
     attestation = Attestation(
