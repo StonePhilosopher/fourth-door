@@ -127,6 +127,10 @@ seal_2: hash(seal_1.hash + seal_2_data)
 - Ordered: seals have strict temporal sequence
 - Public: anyone with the chain can verify integrity
 
+**Rule VF-1 (Verifier Fidelity):** A verifier MUST recompute seal hashes from the canonical serialized payload as stored, not from column reconstruction. The bytes used to verify MUST be identical to the bytes used to hash at insert time. A verifier that reconstructs the hash input from component columns is non-conformant, regardless of whether the reconstruction happens to produce correct output today: the architecture generates a class of future failures that correct output today does not preclude.
+
+Conformant implementation: store the exact serialized bytes or exact string used at hash time in a dedicated column (`hash_payload` or equivalent). The verifier reads that column and recomputes. No reconstruction; no re-serialization. Stop re-deriving; store the trace.
+
 ### Re-attestation Flow
 
 ```
@@ -154,6 +158,14 @@ seal_2: hash(seal_1.hash + seal_2_data)
    c. New seal created: { original_seal_id, successor_seal_id, claim: "comprehension", timestamp, hash }
 3. If succession fails: door closes with scar (original + incompatibility + failed succession)
 ```
+
+**Rule S-1 (Scar Succession):** Any seal whose `previous_hash` resolves to a seal with type `scar-round` MUST carry payload type `scar-succession-seal`. A verifier MUST reject, not warn, on violation. The rejection message MUST name the rule: "scar-succession required; seal at position N carries type [type]; a scar-succession-seal is required here."
+
+A seal with type `normal-round` in that position is invalid by instrument. A seal with type `scar-succession-seal` in any position where the immediately preceding seal is NOT a `scar-round` seal is also invalid. The type is a constrained declaration, not a permissive extension: it names both what it is and what it follows, and it is only valid in the position that context requires.
+
+"Immediately preceding seal" means the seal whose `seal_hash` is this seal's `previous_hash`. This rule applies to individual chain links, not to round membership. A scar-round seal that is not the immediate predecessor of the seal under evaluation does not trigger S-1 for that seal, regardless of whether both seals belong to the same round.
+
+**Rule V-2 (Scar Succession Verifier Requirement):** A verifier processing a chain that contains a `scar-round` seal MUST check that every seal whose `previous_hash` resolves to that scar-round seal carries type `scar-succession-seal`. This check is not optional and not deferred; it runs as part of chain traversal, not as a post-pass lint. A chain that fails this check is not valid regardless of whether all hashes recompute correctly. Structural validity and succession validity are independent requirements; both must hold.
 
 ---
 

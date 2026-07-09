@@ -56,6 +56,7 @@ class Seal(Base):
     previous_hash = Column(String)
     seal_hash = Column(String, nullable=False, unique=True)
     hash_timestamp = Column(String)  # exact timestamp used during hash computation, for honest verification
+    hash_payload = Column(Text)  # canonical serialized payload used during hash computation
     
     # State machine
     state = Column(Enum(SealState), default=SealState.OPEN)
@@ -93,4 +94,14 @@ def init_db(db_path="fourth_door.db"):
         conn.exec_driver_sql("BEGIN IMMEDIATE")
     
     Base.metadata.create_all(engine)
+
+    # Prototype migrations for existing local SQLite databases created by v3a-v3d.
+    # create_all() does not add columns to existing tables.
+    with engine.begin() as conn:
+        seal_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(seals)")}
+        if "hash_timestamp" not in seal_columns:
+            conn.exec_driver_sql("ALTER TABLE seals ADD COLUMN hash_timestamp VARCHAR")
+        if "hash_payload" not in seal_columns:
+            conn.exec_driver_sql("ALTER TABLE seals ADD COLUMN hash_payload TEXT")
+
     return engine

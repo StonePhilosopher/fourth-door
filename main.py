@@ -62,11 +62,18 @@ class SuccessionRequest(BaseModel):
     comprehension_claim: str
 
 # Helper: compute hash
-def compute_hash(previous_hash: str, data: dict) -> str:
-    """SHA-256 hash of chain so far + this seal's data."""
-    payload = json.dumps(data, sort_keys=True)
+def canonical_payload(data: dict) -> str:
+    """Canonical serialized bytes for the hash input."""
+    return json.dumps(data, sort_keys=True)
+
+def compute_hash_from_payload(previous_hash: str, payload: str) -> str:
+    """SHA-256 hash of chain so far + already-canonicalized seal payload."""
     combined = (previous_hash or "genesis") + payload
     return hashlib.sha256(combined.encode()).hexdigest()
+
+def compute_hash(previous_hash: str, data: dict) -> str:
+    """SHA-256 hash of chain so far + this seal's data."""
+    return compute_hash_from_payload(previous_hash, canonical_payload(data))
 
 # Routes
 
@@ -112,8 +119,10 @@ def place_seal(
     if req.context_snapshot:
         seal_data["context"] = req.context_snapshot.dict()
     
-    # Compute hash
-    seal_hash = compute_hash(previous_hash, seal_data)
+    # Compute hash from the exact canonical payload that will be stored.
+    # The verifier must read this payload, not hand-rebuild a parallel dict.
+    hash_payload = canonical_payload(seal_data)
+    seal_hash = compute_hash_from_payload(previous_hash, hash_payload)
     
     # Create seal
     seal = Seal(
@@ -127,6 +136,7 @@ def place_seal(
         previous_hash=previous_hash,
         seal_hash=seal_hash,
         hash_timestamp=hash_timestamp,  # exact timestamp used during hash computation
+        hash_payload=hash_payload,
         state=SealState.OPEN,
     )
     db.add(seal)
@@ -318,21 +328,10 @@ def get_chain(round_id: str, db: Session = Depends(get_db)):
     previous_hash = "genesis"
     
     for seal in round_obj.seals:
-        # Recompute the hash from the data using the SAME timestamp that was hashed
-        seal_data = {
-            "agent_id": seal.agent_id,
-            "message": seal.message,
-            "timestamp": seal.hash_timestamp,  # exact timestamp used during insert hash computation
-        }
-        if seal.operator:
-            seal_data["context"] = {
-                "operator": seal.operator,
-                "constraints": json.loads(seal.constraints) if seal.constraints else None,
-                "declared_scope": seal.declared_scope,
-                "implicit_background": seal.implicit_background,
-            }
-        
-        recomputed_hash = compute_hash(previous_hash, seal_data)
+        # Recompute from the canonical payload stored at insert time.
+        # Rebuilding the dict from columns creates verifier drift
+        # (for example [] vs null, defaults, or future fields).
+        recomputed_hash = compute_hash_from_payload(previous_hash, seal.hash_payload or "")
         
         # Verify: does the stored hash match recomputed?
         # Also verify: does previous_hash match what we expect?
@@ -350,6 +349,7 @@ def get_chain(round_id: str, db: Session = Depends(get_db)):
             "recomputed_hash": recomputed_hash,
             "hash_valid": hash_valid,
             "link_valid": link_valid,
+            "hash_payload": seal.hash_payload,
             "timestamp": seal.created_at.isoformat() if seal.created_at else None,
         })
         
