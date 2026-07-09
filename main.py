@@ -128,11 +128,11 @@ def place_seal(
         state=SealState.OPEN,
     )
     db.add(seal)
-    db.flush()  # Flush to get seal.id before updating tip pointer
+    db.flush()  # Flush to get seal.id
     
-    # Update round tip pointer to this new seal
+    # Atomic update: seal insertion + tip pointer update in same transaction
+    # This prevents the race condition where concurrent inserts read the same tip.
     round_obj.tip_seal_id = seal.id
-    
     db.commit()
     db.refresh(seal)
     
