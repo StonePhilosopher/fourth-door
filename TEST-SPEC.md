@@ -36,29 +36,52 @@ Required battery:
 - cancellation racing with refusal/supersession/honest-incompatibility
 - verification that chain order and served state match the winning event
 
-## S-1: Succession End-To-End
+## Closed: S-1 Succession Atomicity
 
-Open question: succession must be atomic with respect to the chain. The danger
-case is a successor claim that exists without a re-attestation.
+Succession atomicity is closed as of `30ecddc` plus Marey's external
+concurrency battery:
+
+- honest-incompatibility scar followed by successful successor comprehension
+  claim
+- succession writes a successor seal into the hash chain
+- `/chain` shows two seals, `all_valid=true`
+- successor payload includes `scar-succession-seal`
+- duplicate successor claim returns 409
+- authenticated agent/body `successor_agent_id` mismatch returns 403
+- 16 concurrent succession claims serialize to exactly one 200 and fifteen 409s
+- one successor seal is written, the chain remains strictly linear, and no
+  `SQLITE_BUSY` 500s occur
+
+The decisive invariant: succession deposits a layer and only one layer, even
+under concurrent claims.
+
+## V-1: Semantic Succession Verification
+
+Open question: `/chain` verifies syntactic integrity, but does it verify that a
+post-scar seal is semantically legitimate?
+
+The danger case is a well-formed successor seal with correct hashes and links
+that does not legitimately follow an honest-incompatibility scar. That chain can
+be `all_valid=true` while representing the wrong act.
 
 Expected behavior to specify:
 
-- a successor claim and its required re-attestation must either commit as one
-  ordered chain transition or fail as one transition
-- after process restart, a fresh reader must never see an ambiguous "live"
-  succession claim that has no corresponding attestation
-- if partial succession is represented at all, it must be legible as partial
-  and terminal/retriable by explicit rule, not by reader guesswork
-- a second succession attempt racing the first must resolve deterministically
+- verifier distinguishes well-formed chain links from valid succession acts
+- a post-scar successor seal must be traceable to exactly one
+  `HONEST_INCOMPATIBILITY` scar
+- successor payload type must match the expected succession act
+- successor identity and authenticated actor must match the rule used at claim
+  time
+- illegitimate successor seals must not be reported as semantically valid even
+  if their hashes recompute
 
 Required battery:
 
-- honest-incompatibility scar followed by successful successor comprehension
-  claim and re-attestation
-- fault injection: kill process between successor claim and re-attestation,
-  restart, and assert the visible state is deterministic
-- two concurrent successor claims against the same scar
-- successor claim racing with cancellation/re-attestation attempts
-- verification that reveal behavior remains blocked or enabled according to the
-  final chain state, not transient intermediate state
-
+- construct or mutate a well-formed successor seal that passes hash/link
+  verification but follows no honest-incompatibility scar
+- construct or mutate a successor seal with the wrong payload type
+- construct or mutate a successor seal with mismatched successor identity
+- assert `/chain` can still report hash validity while a separate semantic
+  verdict rejects the succession act
+- assert reveal/status behavior uses the semantic verdict, not hash validity
+  alone
