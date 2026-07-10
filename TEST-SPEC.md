@@ -79,8 +79,8 @@ Expected behavior to specify:
   time
 - illegitimate successor seals must not be reported as semantically valid even
   if their hashes recompute
-- semantic verification errors name the succession edge/join, not either valid
-  endpoint seal
+- semantic verification errors name the specific succession edge/join that
+  failed, not either valid endpoint seal
 
 Required battery:
 
@@ -94,5 +94,5 @@ Required battery:
   verdict rejects the succession act
 - assert reveal/status behavior uses the semantic verdict, not hash validity
   alone
-- assert the semantic verdict fails at the join and reports the unverified
-  succession edge rather than blaming either endpoint
+- assert the semantic verdict fails at the join and reports the specific
+  unverified succession edge rather than blaming either endpoint
