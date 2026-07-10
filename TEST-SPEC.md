@@ -64,6 +64,11 @@ The danger case is a well-formed successor seal with correct hashes and links
 that does not legitimately follow an honest-incompatibility scar. That chain can
 be `all_valid=true` while representing the wrong act.
 
+The named invariant is no inherited edge trust: endpoint validity is necessary,
+not sufficient. A valid predecessor seal and a valid successor seal do not make
+the succession edge valid by inheritance. The edge must carry its own attestation,
+freshness, and failure mode.
+
 Expected behavior to specify:
 
 - verifier distinguishes well-formed chain links from valid succession acts
@@ -74,6 +79,8 @@ Expected behavior to specify:
   time
 - illegitimate successor seals must not be reported as semantically valid even
   if their hashes recompute
+- semantic verification errors name the succession edge/join, not either valid
+  endpoint seal
 
 Required battery:
 
@@ -81,7 +88,11 @@ Required battery:
   verification but follows no honest-incompatibility scar
 - construct or mutate a successor seal with the wrong payload type
 - construct or mutate a successor seal with mismatched successor identity
+- construct a well-formed chain where every seal verifies locally but the
+  succession edge is stale, missing, or semantically unwarranted
 - assert `/chain` can still report hash validity while a separate semantic
   verdict rejects the succession act
 - assert reveal/status behavior uses the semantic verdict, not hash validity
   alone
+- assert the semantic verdict fails at the join and reports the unverified
+  succession edge rather than blaming either endpoint
